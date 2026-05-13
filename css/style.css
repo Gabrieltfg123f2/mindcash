@@ -39,6 +39,22 @@ textarea {
 .tool-card:hover { transform: translateY(-5px); border-color: var(--primary); }
 .tool-card i { font-size: 2.5rem; color: var(--primary); margin-bottom: 15px; }
 
+/* LOGO */
+.logo-img {
+    display: block;
+    object-fit: contain;
+}
+.main-logo {
+    width: 120px;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto 20px;
+}
+.sidebar-logo {
+    width: 30px;
+    height: auto;
+}
+
 /* BOTÕES */
 .btn-primary { 
     background: linear-gradient(45deg, var(--primary), var(--secondary));
