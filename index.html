@@ -15,7 +15,7 @@
             <img src="logo.png" alt="MindCash" class="main-logo logo-img">
             <h2>MindCash</h2>
             <p>Sua plataforma de networking e ferramentas empresariais.</p>
-            <input type="text" id="user-name-input" placeholder="Como quer ser chamado?">
+            <input type="text" id="user-name-input" class="input-block" placeholder="Como quer ser chamado?">
             <button onclick="handleLocalLogin()" class="btn-primary btn-block">Entrar na Comunidade</button>
         </div>
     </div>
@@ -24,19 +24,25 @@
     <div id="app-screen" class="screen hidden">
         <aside id="sidebar" class="glass">
             <div class="sidebar-header">
-                <img src="logo.png" alt="Logo" class="sidebar-logo logo-img">
-                <span class="logo-text">MINDCASH</span>
+                <div class="sidebar-brand">
+                    <img src="logo.png" alt="Logo" class="sidebar-logo logo-img">
+                    <span class="logo-text">MINDCASH</span>
+                </div>
+                <button id="menu-close" class="menu-button" onclick="toggleMobileSidebar(false)"><i class="fa fa-times"></i></button>
             </div>
             <nav>
-                <button class="nav-link active" onclick="switchView('feed')"><i class="fa fa-comments"></i> Comunidade</button>
-                <button class="nav-link" onclick="switchView('ferramentas')"><i class="fa fa-screwdriver-wrench"></i> Ferramentas</button>
-                <button class="nav-link" onclick="switchView('mentoria')"><i class="fa fa-lightbulb"></i> Ajuda & Mentoria</button>
+                <button class="nav-link active" data-view="feed" onclick="switchView('feed')"><i class="fa fa-comments"></i> Comunidade</button>
+                <button class="nav-link" data-view="ferramentas" onclick="switchView('ferramentas')"><i class="fa fa-screwdriver-wrench"></i> Ferramentas</button>
+                <button class="nav-link" data-view="mentoria" onclick="switchView('mentoria')"><i class="fa fa-lightbulb"></i> Mentoria</button>
             </nav>
-            <button onclick="handleLogout()" class="btn-logout"><i class="fa fa-sign-out-alt"></i> Sair</button>
+            <div class="sidebar-footer">
+                <button onclick="handleLogout()" class="btn-logout"><i class="fa fa-sign-out-alt"></i> Sair</button>
+            </div>
         </aside>
 
         <main id="content">
             <header class="top-bar glass">
+                <button id="menu-toggle" class="menu-button" onclick="toggleMobileSidebar(true)"><i class="fa fa-bars"></i></button>
                 <h2 id="view-title">Comunidade</h2>
                 <div class="user-info">
                     <span id="display-user-name">Usuário</span>
@@ -46,12 +52,14 @@
             <!-- VIEW: FEED DE COMUNICAÇÃO -->
             <section id="view-feed" class="sub-view active">
                 <div class="post-box glass">
-                    <textarea id="post-input" placeholder="Peça ajuda ou compartilhe uma ferramenta..."></textarea>
+                    <div class="post-box-header">
+                        <h3>Compartilhe algo com a comunidade</h3>
+                        <p>Peça ajuda, publique uma ideia ou compartilhe uma dica.</p>
+                    </div>
+                    <textarea id="post-input" placeholder="Escreva sua mensagem..."></textarea>
                     <button onclick="criarPost()" class="btn-primary">Publicar</button>
                 </div>
-                <div id="feed-container">
-                    <!-- Posts aparecerão aqui -->
-                </div>
+                <div id="feed-container"></div>
             </section>
 
             <!-- VIEW: FERRAMENTAS -->
@@ -67,11 +75,18 @@
                         <i class="fa fa-calculator"></i>
                         <h3>Simulador de MEI</h3>
                         <p>Calcule impostos e obrigações básicas.</p>
-                        <button class="btn-secondary">Calcular</button>
+                        <button class="btn-secondary" onclick="openTool('mei')">Calcular</button>
                     </div>
                 </div>
             </section>
         </main>
+    </div>
+
+    <div id="tool-modal" class="modal hidden">
+        <div class="modal-body glass">
+            <button class="modal-close" onclick="closeModal()"><i class="fa fa-times"></i></button>
+            <div id="modal-content"></div>
+        </div>
     </div>
 
     <script src="js/main.js"></script>
