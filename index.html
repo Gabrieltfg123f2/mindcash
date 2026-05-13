@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindCash | Conectando Ideias</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- TELA DE ACESSO RÁPIDO -->
+    <div id="auth-screen" class="screen">
+        <div class="auth-card glass">
+            <img src="logo.png" alt="MindCash" class="main-logo">
+            <h2>MindCash</h2>
+            <p>Sua plataforma de networking e ferramentas empresariais.</p>
+            <input type="text" id="user-name-input" placeholder="Como quer ser chamado?">
+            <button onclick="handleLocalLogin()" class="btn-primary btn-block">Entrar na Comunidade</button>
+        </div>
+    </div>
+
+    <!-- APP PRINCIPAL -->
+    <div id="app-screen" class="screen hidden">
+        <aside id="sidebar" class="glass">
+            <div class="sidebar-header">
+                <img src="logo.png" alt="Logo" width="30">
+                <span class="logo-text">MINDCASH</span>
+            </div>
+            <nav>
+                <button class="nav-link active" onclick="switchView('feed')"><i class="fa fa-comments"></i> Comunidade</button>
+                <button class="nav-link" onclick="switchView('ferramentas')"><i class="fa fa-screwdriver-wrench"></i> Ferramentas</button>
+                <button class="nav-link" onclick="switchView('mentoria')"><i class="fa fa-lightbulb"></i> Ajuda & Mentoria</button>
+            </nav>
+            <button onclick="handleLogout()" class="btn-logout"><i class="fa fa-sign-out-alt"></i> Sair</button>
+        </aside>
+
+        <main id="content">
+            <header class="top-bar glass">
+                <h2 id="view-title">Comunidade</h2>
+                <div class="user-info">
+                    <span id="display-user-name">Usuário</span>
+                </div>
+            </header>
+
+            <!-- VIEW: FEED DE COMUNICAÇÃO -->
+            <section id="view-feed" class="sub-view active">
+                <div class="post-box glass">
+                    <textarea id="post-input" placeholder="Peça ajuda ou compartilhe uma ferramenta..."></textarea>
+                    <button onclick="criarPost()" class="btn-primary">Publicar</button>
+                </div>
+                <div id="feed-container">
+                    <!-- Posts aparecerão aqui -->
+                </div>
+            </section>
+
+            <!-- VIEW: FERRAMENTAS -->
+            <section id="view-ferramentas" class="sub-view">
+                <div class="tools-grid">
+                    <div class="tool-card glass">
+                        <i class="fa fa-table-columns"></i>
+                        <h3>Business Model Canvas</h3>
+                        <p>Estruture seu modelo de negócio de forma visual.</p>
+                        <button class="btn-secondary">Abrir</button>
+                    </div>
+                    <div class="tool-card glass">
+                        <i class="fa fa-calculator"></i>
+                        <h3>Simulador de MEI</h3>
+                        <p>Calcule impostos e obrigações básicas.</p>
+                        <button class="btn-secondary">Calcular</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
