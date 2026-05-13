@@ -3,8 +3,8 @@
  * MindCash — Módulo: Conta
  * Edição de perfil, upload de avatar, histórico de atividades.
  */
-require_once __DIR__ . '/../.gitignore/config/config.php';
-require_once __DIR__ . '/../.gitignore/config/db.php';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 
 iniciarSessao();
