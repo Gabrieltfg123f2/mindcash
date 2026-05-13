@@ -1,238 +1,266 @@
-// Banco de dados simulado no navegador
-const db = JSON.parse(localStorage.getItem('mindcash_v2_db')) || { posts: [] };
-const viewTitles = {
-    feed: 'Comunidade',
-    ferramentas: 'Ferramentas',
-    mentoria: 'Ajuda & Mentoria'
-};
+/**
+ * MindCash — main.js
+ * Chat via Fetch API | Toast | Navegação | CSRF
+ */
 
-window.onload = () => {
-    const user = localStorage.getItem('mindcash_user');
-    if (user) showApp(user);
-    document.querySelectorAll('.nav-link').forEach(button => {
-        button.addEventListener('click', () => {
-            document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
-            button.classList.add('active');
-        });
-    });
-    window.addEventListener('resize', handleResize);
-    handleResize();
-};
+'use strict';
 
-function handleLocalLogin() {
-    const name = document.getElementById('user-name-input').value.trim();
-    if (!name) return alert('Por favor, insira um nome.');
-    localStorage.setItem('mindcash_user', name);
-    showApp(name);
+/* ── Utilidades ────────────────────────────────────────── */
+const $ = (sel, ctx = document) => ctx.querySelector(sel);
+const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+
+function toast(msg, type = 'info') {
+  const wrap = document.getElementById('toast-container') || (() => {
+    const d = document.createElement('div');
+    d.id = 'toast-container';
+    document.body.appendChild(d);
+    return d;
+  })();
+
+  const colors = { info: '#3b82f6', success: '#10b981', danger: '#ef4444', warn: '#f59e0b' };
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderLeftColor = colors[type] || colors.info;
+  t.style.borderLeftWidth = '3px';
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
 }
 
-function showApp(name) {
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app-screen').classList.remove('hidden');
-    document.getElementById('display-user-name').innerText = name;
-    renderFeed();
+function csrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 }
 
-function handleLogout() {
-    localStorage.removeItem('mindcash_user');
-    location.reload();
-}
+/* ── Fetch helper (inclui CSRF automaticamente) ──────── */
+async function apiFetch(url, opts = {}) {
+  const headers = {
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-CSRF-Token': csrfToken(),
+    ...(opts.headers ?? {}),
+  };
 
-function criarPost() {
-    const text = document.getElementById('post-input').value.trim();
-    const user = localStorage.getItem('mindcash_user');
-    if (!text) return alert('Escreva algo antes de publicar.');
-
-    const novoPost = {
-        id: Date.now(),
-        autor: user,
-        conteudo: text,
-        data: new Date().toLocaleDateString('pt-BR'),
-        likes: 0,
-        replies: []
-    };
-
-    db.posts.unshift(novoPost);
-    saveDB();
-    renderFeed();
-    document.getElementById('post-input').value = '';
-}
-
-function renderFeed() {
-    const container = document.getElementById('feed-container');
-    if (!db.posts.length) {
-        container.innerHTML = `
-            <div class="empty-state glass">
-                <strong>Ainda não há publicações.</strong>
-                <p>Seja o primeiro a compartilhar uma ideia ou pedir ajuda.</p>
-            </div>
-        `;
-        return;
+  if (!(opts.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+    if (opts.body && typeof opts.body === 'object') {
+      opts.body = JSON.stringify(opts.body);
     }
+  }
 
-    const currentUser = localStorage.getItem('mindcash_user');
-    container.innerHTML = db.posts.map(post => `
-        <div class="post-card glass">
-            <div class="post-header">
-                <div>
-                    <strong>${post.autor}</strong>
-                    <span>${post.data}</span>
-                </div>
-                <div class="post-meta">
-                    <span>${post.likes} curtidas</span>
-                    ${post.autor === currentUser ? `<button class="btn-secondary" type="button" onclick="deletePost(${post.id})">Excluir</button>` : ''}
-                </div>
-            </div>
-            <p>${post.conteudo}</p>
-            <div class="post-actions">
-                <button type="button" onclick="likePost(${post.id})"><i class="fa fa-thumbs-up"></i> Útil</button>
-                <button type="button" onclick="toggleReplyForm(${post.id})"><i class="fa fa-comment"></i> Responder</button>
-            </div>
-            <div class="comment-section" id="comment-section-${post.id}">
-                ${post.replies.length ? post.replies.map(reply => `
-                    <div class="reply-item">
-                        <strong>${reply.autor}</strong>
-                        <span>${reply.data}</span>
-                        <p>${reply.conteudo}</p>
-                    </div>
-                `).join('') : '<p class="empty-state">Nenhuma resposta ainda. Seja o primeiro a comentar.</p>'}
-                <form class="reply-form hidden" id="reply-form-${post.id}" onsubmit="submitReply(event, ${post.id})">
-                    <textarea id="reply-input-${post.id}" placeholder="Escreva sua resposta..."></textarea>
-                    <button type="submit" class="btn-primary">Enviar resposta</button>
-                </form>
-            </div>
-        </div>
-    `).join('');
+  try {
+    const res = await fetch(url, { ...opts, headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro ?? 'Erro na requisição');
+    return data;
+  } catch (err) {
+    toast(err.message, 'danger');
+    throw err;
+  }
 }
 
-function saveDB() {
-    localStorage.setItem('mindcash_v2_db', JSON.stringify(db));
+/* ── Navegação SPA-light ─────────────────────────────── */
+function initNav() {
+  const modAtual = new URLSearchParams(location.search).get('mod') || 'inicio';
+  $$('.nav-item').forEach(el => {
+    const mod = el.dataset.mod;
+    if (mod === modAtual) el.classList.add('active');
+  });
 }
 
-function likePost(postId) {
-    const post = db.posts.find(item => item.id === postId);
-    if (!post) return;
-    post.likes += 1;
-    saveDB();
-    renderFeed();
-}
+/* ════════════════════════════════════════════════════════
+   CHAT — Comunidade
+   ════════════════════════════════════════════════════════ */
+const CHAT_POLL_MS = 3000;
+let chatLastId    = 0;
+let chatPollTimer = null;
 
-function deletePost(postId) {
-    const postIndex = db.posts.findIndex(item => item.id === postId);
-    if (postIndex === -1) return;
-    db.posts.splice(postIndex, 1);
-    saveDB();
-    renderFeed();
-}
+function initChat() {
+  const msgList  = document.getElementById('chat-messages');
+  const form     = document.getElementById('chat-form');
+  const inputEl  = document.getElementById('chat-input');
+  const sendBtn  = document.getElementById('chat-send');
 
-function toggleReplyForm(postId) {
-    const form = document.getElementById(`reply-form-${postId}`);
-    if (!form) return;
-    form.classList.toggle('hidden');
-    if (!form.classList.contains('hidden')) {
-        form.querySelector('textarea').focus();
+  if (!msgList || !form) return;
+
+  // Primeira carga
+  carregarMensagens(true);
+
+  // Polling
+  chatPollTimer = setInterval(() => carregarMensagens(false), CHAT_POLL_MS);
+
+  // Envio
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const texto = inputEl.value.trim();
+    if (!texto) return;
+
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const data = await apiFetch('index.php?mod=comunidade&action=enviar', {
+        method: 'POST',
+        body: { mensagem: texto },
+      });
+
+      if (data.ok) {
+        inputEl.value = '';
+        await carregarMensagens(false);
+        scrollChat();
+      }
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = `<svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+      inputEl.focus();
     }
-}
+  });
 
-function submitReply(event, postId) {
-    event.preventDefault();
-    const input = document.getElementById(`reply-input-${postId}`);
-    if (!input) return;
-
-    const text = input.value.trim();
-    if (!text) return alert('Escreva algo antes de responder.');
-
-    const post = db.posts.find(item => item.id === postId);
-    if (!post) return;
-
-    post.replies.push({
-        autor: localStorage.getItem('mindcash_user'),
-        conteudo: text,
-        data: new Date().toLocaleDateString('pt-BR')
-    });
-    saveDB();
-    renderFeed();
-}
-
-function switchView(view) {
-    document.querySelectorAll('.sub-view').forEach(v => v.classList.remove('active'));
-    const selected = document.getElementById(`view-${view}`);
-    if (!selected) return;
-    selected.classList.add('active');
-    document.getElementById('view-title').innerText = viewTitles[view] || 'MindCash';
-    if (window.innerWidth <= 920) toggleMobileSidebar(false);
-}
-
-function openTool(tool) {
-    const modal = document.getElementById('tool-modal');
-    const content = document.getElementById('modal-content');
-
-    if (tool === 'canvas') {
-        content.innerHTML = `
-            <h2>Business Model Canvas</h2>
-            <p>Use este modelo para mapear valor, clientes e canais de entrega.</p>
-            <div class="tool-result">
-                <ul>
-                    <li><strong>Proposta de valor:</strong> O que você resolve?</li>
-                    <li><strong>Clientes:</strong> Para quem?</li>
-                    <li><strong>Canais:</strong> Como entregar?</li>
-                    <li><strong>Receitas:</strong> Como ganhar?</li>
-                    <li><strong>Recursos:</strong> O que você precisa?</li>
-                </ul>
-            </div>
-        `;
-    } else if (tool === 'mei') {
-        content.innerHTML = `
-            <h2>Simulador de MEI</h2>
-            <p>Veja quanto você pode receber líquido após os custos básicos.</p>
-            <div class="tool-form">
-                <label for="mei-income">Renda mensal esperada (R$)</label>
-                <input id="mei-income" type="number" min="0" placeholder="Ex: 3500" />
-                <button class="btn-primary" onclick="calculateMei()">Calcular MEI</button>
-            </div>
-            <div id="mei-result" class="tool-result"></div>
-        `;
+  // Enviar com Enter (Shift+Enter = nova linha)
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
     }
-
-    modal.classList.remove('hidden');
+  });
 }
 
-function closeModal() {
-    document.getElementById('tool-modal').classList.add('hidden');
+async function carregarMensagens(inicial) {
+  const msgList = document.getElementById('chat-messages');
+  if (!msgList) return;
+
+  const url = `index.php?mod=comunidade&action=listar&desde=${chatLastId}`;
+  const data = await apiFetch(url);
+
+  if (!data.mensagens?.length) return;
+
+  const atBottom = msgList.scrollHeight - msgList.scrollTop - msgList.clientHeight < 60;
+
+  data.mensagens.forEach(msg => {
+    if (msg.id <= chatLastId) return;
+    chatLastId = Math.max(chatLastId, msg.id);
+    msgList.appendChild(buildMsgBubble(msg));
+  });
+
+  if (inicial || atBottom) scrollChat();
 }
 
-function calculateMei() {
-    const incomeInput = document.getElementById('mei-income');
-    const resultBox = document.getElementById('mei-result');
-    const income = Number(incomeInput.value.trim());
+function buildMsgBubble(msg) {
+  const isMine = msg.minha === true || msg.minha === 1;
+  const wrap   = document.createElement('div');
+  wrap.className = `msg-bubble${isMine ? ' mine' : ''} fade-in`;
+  wrap.dataset.id = msg.id;
 
-    if (!income || income <= 0) {
-        resultBox.innerHTML = `<p>Digite uma renda mensal válida para calcular.</p>`;
-        return;
-    }
+  const inicial = (msg.nome ?? 'A')[0].toUpperCase();
+  const avatarHtml = msg.avatar_url
+    ? `<img src="${escHtml(msg.avatar_url)}" alt="">`
+    : inicial;
 
-    const custoMEI = 75.00;
-    const lucroEstimado = income - custoMEI;
-
-    resultBox.innerHTML = `
-        <p><strong>Renda mensal:</strong> R$ ${income.toFixed(2)}</p>
-        <p><strong>Custo MEI:</strong> R$ ${custoMEI.toFixed(2)}</p>
-        <p><strong>Renda líquida estimada:</strong> R$ ${lucroEstimado.toFixed(2)}</p>
-        <p>Este cálculo é uma estimativa simples para você ter uma ideia dos valores.</p>
-    `;
+  wrap.innerHTML = `
+    <div class="msg-avatar">${avatarHtml}</div>
+    <div class="msg-body">
+      <div class="msg-meta">
+        <strong>${escHtml(msg.nome ?? 'Anônimo')}</strong>
+        <span>${formatTime(msg.criado_em)}</span>
+      </div>
+      <div class="msg-text">${escHtml(msg.conteudo)}</div>
+    </div>`;
+  return wrap;
 }
 
-function toggleMobileSidebar(open) {
-    const sidebar = document.getElementById('sidebar');
-    if (open) {
-        sidebar.classList.add('open');
-    } else {
-        sidebar.classList.remove('open');
-    }
+function scrollChat() {
+  const el = document.getElementById('chat-messages');
+  if (el) el.scrollTop = el.scrollHeight;
 }
 
-function handleResize() {
-    if (window.innerWidth > 920) {
-        document.getElementById('sidebar').classList.remove('open');
-    }
+/* ════════════════════════════════════════════════════════
+   FERRAMENTAS — Busca de mensagens
+   ════════════════════════════════════════════════════════ */
+function initFerramantas() {
+  const searchInput = document.getElementById('busca-input');
+  const resultados  = document.getElementById('busca-resultados');
+  if (!searchInput || !resultados) return;
+
+  let debounceTimer;
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const q = searchInput.value.trim();
+    if (q.length < 2) { resultados.innerHTML = ''; return; }
+
+    debounceTimer = setTimeout(async () => {
+      resultados.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:12px">Buscando…</div>';
+      try {
+        const data = await apiFetch(`index.php?mod=ferramentas&action=buscar&q=${encodeURIComponent(q)}`);
+        renderBusca(data.resultados ?? [], resultados);
+      } catch {}
+    }, 380);
+  });
 }
+
+function renderBusca(items, container) {
+  if (!items.length) {
+    container.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:12px">Nenhum resultado.</div>';
+    return;
+  }
+  container.innerHTML = items.map(m => `
+    <div class="activity-item fade-in">
+      <div class="activity-dot"></div>
+      <div>
+        <strong style="font-size:12px">${escHtml(m.nome)}</strong>
+        <p style="font-size:13px;margin-top:2px">${escHtml(m.conteudo)}</p>
+      </div>
+      <span class="activity-time">${formatTime(m.criado_em)}</span>
+    </div>`).join('');
+}
+
+/* ════════════════════════════════════════════════════════
+   CONTA — Upload de avatar
+   ════════════════════════════════════════════════════════ */
+function initConta() {
+  const fileInput = document.getElementById('avatar-input');
+  const preview   = document.getElementById('avatar-preview');
+  if (!fileInput || !preview) return;
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast('Avatar deve ter no máximo 2 MB.', 'warn'); return; }
+    const reader = new FileReader();
+    reader.onload = e => { preview.src = e.target.result; };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ── Helpers ─────────────────────────────────────────── */
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso.replace(' ', 'T'));
+    const now = new Date();
+    const diff = (now - d) / 1000;
+    if (diff < 60)   return 'agora';
+    if (diff < 3600) return `${Math.floor(diff / 60)}min`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return d.toLocaleDateString('pt-BR');
+  } catch { return ''; }
+}
+
+/* ── Boot ──────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  initNav();
+  initChat();
+  initFerramantas();
+  initConta();
+});
+
+// Limpa polling ao sair da página
+window.addEventListener('beforeunload', () => {
+  clearInterval(chatPollTimer);
+});
