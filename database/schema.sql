@@ -1,7 +1,7 @@
--- ============================================================
---  MindCash — Schema do Banco de Dados
---  Compatível com MySQL 8+ / MariaDB 10.6+
--- ============================================================
+-- ============================================
+--  MindCash — Schema MySQL (PDO Ready)
+--  Engine: InnoDB | Charset: utf8mb4
+-- ============================================
 
 CREATE DATABASE IF NOT EXISTS mindcash
   CHARACTER SET utf8mb4
@@ -9,110 +9,121 @@ CREATE DATABASE IF NOT EXISTS mindcash
 
 USE mindcash;
 
--- ── Usuários ────────────────────────────────────────────────
+-- ──────────────────────────────────────────
+--  TABELA: usuarios
+-- ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS usuarios (
-    id            INT UNSIGNED    AUTO_INCREMENT PRIMARY KEY,
-    uuid          CHAR(36)        NOT NULL UNIQUE,           -- identificador público
-    nome          VARCHAR(120)    NOT NULL DEFAULT 'Anônimo',
-    email         VARCHAR(255)    UNIQUE,                    -- NULL para anônimos
-    senha_hash    VARCHAR(255),                              -- NULL para OAuth
-    avatar_url    VARCHAR(512)    DEFAULT NULL,
-    google_id     VARCHAR(128)    UNIQUE DEFAULT NULL,
-    nivel         ENUM('anonimo','membro','adm') NOT NULL DEFAULT 'anonimo',
-    ativo         TINYINT(1)      NOT NULL DEFAULT 1,
-    criado_em     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    ultimo_login  DATETIME        DEFAULT NULL,
-    INDEX idx_email  (email),
-    INDEX idx_nivel  (nivel)
-) ENGINE=InnoDB;
+    id            INT UNSIGNED     NOT NULL AUTO_INCREMENT,
+    nome          VARCHAR(100)     NOT NULL,
+    email         VARCHAR(180)     NOT NULL UNIQUE,
+    senha         VARCHAR(255)     NOT NULL,           -- bcrypt hash
+    nivel         ENUM('membro','adm') NOT NULL DEFAULT 'membro',
+    foto          VARCHAR(300)     DEFAULT NULL,       -- caminho relativo
+    bio           TEXT             DEFAULT NULL,
+    ativo         TINYINT(1)       NOT NULL DEFAULT 1,
+    criado_em     DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                   ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_email (email),
+    INDEX idx_nivel (nivel)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Sessões persistentes ─────────────────────────────────────
+-- ──────────────────────────────────────────
+--  TABELA: sessoes (tokens de sessão)
+-- ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sessoes (
-    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    usuario_id    INT UNSIGNED    NOT NULL,
-    token_hash    CHAR(64)        NOT NULL UNIQUE,           -- SHA-256
-    ip            VARCHAR(45)     DEFAULT NULL,
-    user_agent    VARCHAR(512)    DEFAULT NULL,
-    expira_em     DATETIME        NOT NULL,
-    criado_em     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    usuario_id  INT UNSIGNED  NOT NULL,
+    token       VARCHAR(64)   NOT NULL UNIQUE,         -- SHA-256 hex
+    ip          VARCHAR(45)   DEFAULT NULL,
+    user_agent  VARCHAR(300)  DEFAULT NULL,
+    expira_em   DATETIME      NOT NULL,
+    criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-    INDEX idx_token (token_hash),
+    INDEX idx_token (token),
     INDEX idx_expira (expira_em)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Tokens CSRF ──────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS csrf_tokens (
-    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    usuario_id    INT UNSIGNED    NOT NULL,
-    token         CHAR(64)        NOT NULL UNIQUE,
-    expira_em     DATETIME        NOT NULL,
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
--- ── Mensagens da Comunidade ──────────────────────────────────
-CREATE TABLE IF NOT EXISTS mensagens (
-    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    usuario_id    INT UNSIGNED    NOT NULL,
-    conteudo      TEXT            NOT NULL,
-    deletado      TINYINT(1)      NOT NULL DEFAULT 0,
-    criado_em     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- ──────────────────────────────────────────
+--  TABELA: mensagens_comunidade
+-- ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS mensagens_comunidade (
+    id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    usuario_id  INT UNSIGNED  NOT NULL,
+    conteudo    TEXT          NOT NULL,                -- sanitizado no servidor
+    criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-    INDEX idx_criado (criado_em),
-    FULLTEXT INDEX ft_conteudo (conteudo)
-) ENGINE=InnoDB;
+    INDEX idx_criado (criado_em)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Reações às mensagens ─────────────────────────────────────
-CREATE TABLE IF NOT EXISTS reacoes (
-    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    mensagem_id   BIGINT UNSIGNED NOT NULL,
-    usuario_id    INT UNSIGNED    NOT NULL,
-    tipo          ENUM('like','heart','fire') NOT NULL DEFAULT 'like',
-    criado_em     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_reacao (mensagem_id, usuario_id, tipo),
-    FOREIGN KEY (mensagem_id) REFERENCES mensagens(id) ON DELETE CASCADE,
-    FOREIGN KEY (usuario_id)  REFERENCES usuarios(id)  ON DELETE CASCADE
-) ENGINE=InnoDB;
-
--- ── Tópicos de Mentoria ──────────────────────────────────────
-CREATE TABLE IF NOT EXISTS topicos_mentoria (
-    id            INT UNSIGNED    AUTO_INCREMENT PRIMARY KEY,
-    titulo        VARCHAR(255)    NOT NULL,
-    descricao     TEXT,
-    adm_id        INT UNSIGNED    NOT NULL,
-    publicado     TINYINT(1)      NOT NULL DEFAULT 0,
-    criado_em     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (adm_id) REFERENCES usuarios(id)
-) ENGINE=InnoDB;
-
--- ── Perfil estendido do usuário ──────────────────────────────
-CREATE TABLE IF NOT EXISTS perfis (
-    usuario_id    INT UNSIGNED    PRIMARY KEY,
-    bio           VARCHAR(500)    DEFAULT NULL,
-    meta_mensal   DECIMAL(12,2)   DEFAULT 0.00,
-    moeda         CHAR(3)         DEFAULT 'BRL',
-    tema          ENUM('dark','light') DEFAULT 'dark',
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
--- ── Log de atividades ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS atividades (
-    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    usuario_id    INT UNSIGNED    NOT NULL,
-    acao          VARCHAR(120)    NOT NULL,
-    detalhes      JSON            DEFAULT NULL,
-    ip            VARCHAR(45)     DEFAULT NULL,
-    criado_em     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- ──────────────────────────────────────────
+--  TABELA: historico_acoes
+-- ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS historico_acoes (
+    id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    usuario_id  INT UNSIGNED  NOT NULL,
+    acao        VARCHAR(150)  NOT NULL,
+    detalhes    JSON          DEFAULT NULL,
+    ip          VARCHAR(45)   DEFAULT NULL,
+    criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
     INDEX idx_usuario_acao (usuario_id, criado_em)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Dados de seed (admin padrão) ────────────────────────────
--- Senha padrão: MindCash@ADM2025  (bcrypt — troque imediatamente)
-INSERT INTO usuarios (uuid, nome, email, senha_hash, nivel)
-VALUES (
-    UUID(),
+-- ──────────────────────────────────────────
+--  TABELA: ferramentas_dados (monitoramento)
+-- ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS ferramentas_dados (
+    id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    usuario_id  INT UNSIGNED  NOT NULL,
+    tipo        ENUM('meta','alerta','nota') NOT NULL DEFAULT 'nota',
+    titulo      VARCHAR(200)  NOT NULL,
+    valor       DECIMAL(15,2) DEFAULT NULL,
+    meta_valor  DECIMAL(15,2) DEFAULT NULL,
+    cor         VARCHAR(7)    DEFAULT '#6C63FF',
+    ativo       TINYINT(1)    NOT NULL DEFAULT 1,
+    criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    INDEX idx_usuario_tipo (usuario_id, tipo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ──────────────────────────────────────────
+--  TABELA: mentorias
+-- ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS mentorias (
+    id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    titulo      VARCHAR(200)  NOT NULL,
+    descricao   TEXT          DEFAULT NULL,
+    conteudo    LONGTEXT      DEFAULT NULL,            -- HTML seguro
+    autor_id    INT UNSIGNED  NOT NULL,
+    publicado   TINYINT(1)    NOT NULL DEFAULT 0,
+    criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    FOREIGN KEY (autor_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    INDEX idx_publicado (publicado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ──────────────────────────────────────────
+--  DADOS INICIAIS — Admin padrão
+--  Senha: Admin@2025  (bcrypt $2y$12$...)
+-- ──────────────────────────────────────────
+INSERT IGNORE INTO usuarios (nome, email, senha, nivel) VALUES
+(
     'Administrador',
-    'adm@mindcash.local',
-    '$2y$12$exampleHashMustBeReplacedByRealBcryptHashHereXXXXXXXXXX',
+    'admin@mindcash.app',
+    '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'adm'
-) ON DUPLICATE KEY UPDATE id = id;
+),
+(
+    'Usuário Demo',
+    'demo@mindcash.app',
+    '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    'membro'
+);
+-- Senha dos dois usuários acima: "password" (para teste)
+-- Em produção, gere novos hashes com password_hash()

@@ -1,92 +1,171 @@
 <?php
-/**
- * MindCash — Módulo: Início
- */
-if (!defined('NOME_SISTEMA')) {
-    require_once __DIR__ . '/../config/config.php';
-    require_once __DIR__ . '/../config/auth.php';
-    iniciarSessao();
-}
+// ============================================================
+//  MindCash — Módulo: Início (Dashboard)
+// ============================================================
 
-$usuario = usuarioAtual();
-$nomeUsuario = xss($usuario['nome'] ?? 'Visitante');
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/auth.php';
+
+$usuario = usuario_logado();
+
+// ── Dados para os cards de estatísticas ──────────────────────
+$stats = [];
+
+if ($usuario) {
+    try {
+        $stats['mensagens'] = db_um(
+            'SELECT COUNT(*) as total FROM mensagens_comunidade WHERE usuario_id = ?',
+            [$usuario['id']]
+        )['total'] ?? 0;
+
+        $stats['ferramentas'] = db_um(
+            'SELECT COUNT(*) as total FROM ferramentas_dados WHERE usuario_id = ?',
+            [$usuario['id']]
+        )['total'] ?? 0;
+
+        $stats['acoes'] = db_um(
+            'SELECT COUNT(*) as total FROM historico_acoes WHERE usuario_id = ?',
+            [$usuario['id']]
+        )['total'] ?? 0;
+
+        $stats['dias'] = db_um(
+            'SELECT DATEDIFF(NOW(), criado_em) as dias FROM usuarios WHERE id = ? LIMIT 1',
+            [$usuario['id']]
+        )['dias'] ?? 0;
+
+    } catch (Throwable) {
+        $stats = ['mensagens' => 0, 'ferramentas' => 0, 'acoes' => 0, 'dias' => 0];
+    }
+}
 ?>
 
-<section class="hero fade-in">
-  <div class="hero-badge">✦ Inteligência Financeira</div>
-  <h1><?= xss(NOME_SISTEMA) ?></h1>
-  <p><?= xss($DESCRICAO ?? 'Inteligência financeira para sua mente e bolso.') ?></p>
-
-  <?php if (!estaLogado() || ($usuario['nivel'] ?? '') === 'anonimo'): ?>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
-      <a href="index.php?mod=conta" class="btn btn-primary">
-        <?= svgIcon('user') ?> Criar conta
-      </a>
-      <a href="index.php?mod=comunidade" class="btn btn-outline">
-        <?= svgIcon('users') ?> Ver comunidade
-      </a>
-    </div>
-  <?php else: ?>
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <a href="index.php?mod=comunidade" class="btn btn-primary">
-        <?= svgIcon('users') ?> Ir para comunidade
-      </a>
-      <a href="index.php?mod=ferramentas" class="btn btn-outline">
-        <?= svgIcon('tool') ?> Ferramentas
-      </a>
-    </div>
-  <?php endif; ?>
+<section class="pagina-header animar-entrada">
+  <h1 class="pagina-titulo">
+    <?php if ($usuario): ?>
+      Olá, <?= esc(explode(' ', $usuario['nome'])[0]) ?> 👋
+    <?php else: ?>
+      Bem-vindo ao <?= esc(SISTEMA_NOME) ?>
+    <?php endif; ?>
+  </h1>
+  <p class="pagina-subtitulo"><?= esc(SISTEMA_TAGLINE) ?></p>
 </section>
 
-<!-- Features -->
-<div class="features-grid">
+<?php if (!$usuario): ?>
+<!-- ── CTA para não logados ──────────────────────────────── -->
+<div class="card animar-entrada" style="
+  background: linear-gradient(135deg, rgba(124,111,255,0.15), rgba(0,229,195,0.08));
+  border-color: rgba(124,111,255,0.3);
+  text-align: center;
+  padding: 40px 24px;
+">
+  <div style="font-size:3rem;margin-bottom:16px">🚀</div>
+  <h2 style="font-family:var(--fonte-display);font-size:1.4rem;margin-bottom:8px">
+    Sua jornada financeira começa aqui
+  </h2>
+  <p style="color:var(--texto-secundario);margin-bottom:24px;font-size:.9rem">
+    <?= esc(SISTEMA_NOME) ?> é a plataforma inteligente para gerenciar,
+    aprender e crescer financeiramente com uma comunidade ativa.
+  </p>
+  <button class="btn btn-primario btn-lg" data-aba="conta" onclick="navegarPara('conta')">
+    Criar conta gratuita
+  </button>
+</div>
+
+<!-- ── Features ─────────────────────────────────────────── -->
+<div style="display:grid;gap:12px;margin-top:8px">
   <?php
   $features = [
-    ['icon' => 'trending-up', 'title' => 'Finanças inteligentes', 'desc' => 'Monitore gastos e metas com clareza e simplicidade.'],
-    ['icon' => 'users',       'title' => 'Comunidade ativa',      'desc' => 'Compartilhe experiências e aprenda com outros membros.'],
-    ['icon' => 'tool',        'title' => 'Ferramentas práticas',  'desc' => 'Calculadoras, buscas e monitoria de dados em tempo real.'],
-    ['icon' => 'star',        'title' => 'Mentoria exclusiva',    'desc' => 'Conteúdo e suporte direto com especialistas da plataforma.'],
+    ['🧠', 'Mentoria Inteligente', 'Aprenda com especialistas em conteúdos exclusivos.'],
+    ['💬', 'Comunidade Ativa', 'Chat em tempo real com outros membros da plataforma.'],
+    ['📊', 'Ferramentas de Monitoramento', 'Acompanhe metas e alertas em tempo real.'],
+    ['🔐', 'Segurança Total', 'Seus dados protegidos com criptografia e PDO.'],
   ];
-  foreach ($features as $f): ?>
-    <div class="feature-card fade-in">
-      <div class="feature-icon"><?= svgIcon($f['icon']) ?></div>
-      <h3><?= xss($f['title']) ?></h3>
-      <p><?= xss($f['desc']) ?></p>
+  foreach ($features as [$icon, $titulo, $desc]):
+  ?>
+  <div class="card animar-entrada" style="display:flex;align-items:center;gap:16px;padding:16px">
+    <div style="font-size:1.8rem;flex-shrink:0"><?= $icon ?></div>
+    <div>
+      <div style="font-weight:600;font-size:.95rem;margin-bottom:2px"><?= esc($titulo) ?></div>
+      <div style="font-size:.82rem;color:var(--texto-secundario)"><?= esc($desc) ?></div>
     </div>
+  </div>
   <?php endforeach; ?>
 </div>
 
-<!-- Boas-vindas personalizada -->
-<?php if ($usuario): ?>
-<div class="card card-glow" style="margin-top:24px">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
-    <div style="font-size:28px">👋</div>
-    <div>
-      <div style="font-family:var(--font-display);font-size:18px;font-weight:700">
-        Olá, <?= $nomeUsuario ?>!
-      </div>
-      <div style="font-size:13px;color:var(--text-muted)">
-        Você está logado como
-        <span style="color:var(--accent)"><?= xss($usuario['nivel']) ?></span>
-      </div>
-    </div>
+<?php else: ?>
+<!-- ── Stats do usuário ──────────────────────────────────── -->
+<div class="stat-grid">
+  <?php
+  $cartoes = [
+    ['valor' => $stats['dias'],        'nome' => 'Dias na plataforma', 'cor' => 'var(--cor-primaria)',   'icon' => '📅'],
+    ['valor' => $stats['mensagens'],   'nome' => 'Mensagens enviadas', 'cor' => 'var(--cor-secundaria)', 'icon' => '💬'],
+    ['valor' => $stats['ferramentas'], 'nome' => 'Ferramentas ativas', 'cor' => 'var(--cor-acento)',    'icon' => '📊'],
+    ['valor' => $stats['acoes'],       'nome' => 'Ações registradas',  'cor' => 'var(--cor-aviso)',     'icon' => '⚡'],
+  ];
+  foreach ($cartoes as $c):
+  ?>
+  <div class="stat-card animar-entrada" style="--cor-accent-local:<?= $c['cor'] ?>">
+    <div class="stat-valor"><?= number_format($c['valor']) ?></div>
+    <div class="stat-nome"><?= esc($c['nome']) ?></div>
+    <div class="stat-icon"><?= $c['icon'] ?></div>
   </div>
-  <p style="font-size:14px;color:var(--text-muted);margin-top:8px">
-    Use o menu abaixo para navegar entre as seções do <?= xss(NOME_SISTEMA) ?>.
+  <?php endforeach; ?>
+</div>
+
+<!-- ── Boas-vindas / destaque ──────────────────────────── -->
+<div class="card animar-entrada" style="
+  background: linear-gradient(135deg, rgba(124,111,255,0.12), rgba(0,229,195,0.06));
+  border-color: rgba(124,111,255,0.25);
+  margin-bottom: 16px;
+">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+    <div style="font-size:1.5rem">✨</div>
+    <h2 style="font-family:var(--fonte-display);font-size:1.1rem;font-weight:700">
+      O que há de novo no <?= esc(SISTEMA_NOME) ?>
+    </h2>
+  </div>
+  <p style="color:var(--texto-secundario);font-size:.875rem;line-height:1.7">
+    Explore as ferramentas de monitoramento, participe da comunidade e acesse
+    conteúdos exclusivos de mentoria. Sua inteligência financeira cresce a cada dia aqui.
   </p>
+</div>
+
+<!-- ── Ações rápidas ─────────────────────────────────── -->
+<div class="card animar-entrada">
+  <div class="card-titulo">
+    <svg viewBox="0 0 24 24" width="18" height="18" stroke="var(--cor-primaria)" fill="none" stroke-width="2">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>
+    Ações Rápidas
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <?php
+    $acoes = [
+      ['aba' => 'comunidade',  'label' => '💬 Comunidade',   'cor' => 'rgba(124,111,255,.15)'],
+      ['aba' => 'ferramentas', 'label' => '🔍 Ferramentas',  'cor' => 'rgba(0,229,195,.1)'],
+      ['aba' => 'mentoria',    'label' => '📞 Mentoria',     'cor' => 'rgba(255,111,176,.1)'],
+      ['aba' => 'conta',       'label' => '👤 Meu Perfil',   'cor' => 'rgba(255,181,71,.1)'],
+    ];
+    foreach ($acoes as $a):
+    ?>
+    <button
+      class="btn btn-vidro"
+      style="background:<?= $a['cor'] ?>;justify-content:flex-start;font-size:.82rem"
+      onclick="navegarPara('<?= esc($a['aba']) ?>')">
+      <?= $a['label'] ?>
+    </button>
+    <?php endforeach; ?>
+  </div>
+</div>
+
+<!-- ── Nível / Badge ─────────────────────────────────── -->
+<?php if ($usuario['nivel'] === 'adm'): ?>
+<div class="alerta alerta-info animar-entrada" style="display:flex;align-items:center;gap:8px">
+  <span>🛡️</span>
+  <span>Você é <strong>Administrador</strong> do <?= esc(SISTEMA_NOME) ?>. Acesso total liberado.</span>
 </div>
 <?php endif; ?>
 
-<?php
-// SVG helper local para este módulo
-function svgIcon(string $name): string {
-    $icons = [
-        'user'         => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-        'users'        => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
-        'tool'         => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>',
-        'star'         => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
-        'trending-up'  => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
-    ];
-    return $icons[$name] ?? '';
-}
-?>
+<?php endif; ?>

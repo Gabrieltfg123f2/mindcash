@@ -1,47 +1,43 @@
 <?php
-/**
- * MindCash — Configuração Global
- * Altere $NOME_SISTEMA aqui para refletir em TODO o sistema.
- */
+// ============================================================
+//  MindCash — Configuração Global do Sistema
+//  Para renomear o app inteiro, altere APENAS esta variável:
+// ============================================================
 
-// ── Identidade ───────────────────────────────────────────────
-$NOME_SISTEMA   = 'MindCash';
-$VERSAO         = '1.0.0';
-$DESCRICAO      = 'Inteligência financeira para sua mente e bolso.';
+$NOME_SISTEMA = 'MindCash';
 
-// ── Ambiente ─────────────────────────────────────────────────
-define('ENV',         'development');   // 'production' em produção
-define('BASE_URL',    'http://localhost/mindcash');
-define('BASE_PATH',   __DIR__ . '/..');
+// ── Meta / SEO ────────────────────────────────────────────
+define('SISTEMA_NOME',      $NOME_SISTEMA);
+define('SISTEMA_TAGLINE',   'Sua inteligência financeira, amplificada.');
+define('SISTEMA_VERSAO',    '1.0.0');
+define('SISTEMA_AUTOR',     'MindCash Team');
+define('SISTEMA_COR',       '#6C63FF');   // cor primária usada no manifest.json
+define('SISTEMA_URL',       'https://mindcash.app');
 
-// ── Caminhos ─────────────────────────────────────────────────
-define('MODULES_PATH', BASE_PATH . '/modules');
-define('ASSETS_URL',   BASE_URL  . '/assets');
-define('CSS_URL',      BASE_URL  . '/css');
-define('JS_URL',       BASE_URL  . '/js');
+// ── Ambiente ─────────────────────────────────────────────
+define('AMBIENTE',   'desenvolvimento');  // 'producao' desativa erros visíveis
+define('DEBUG_MODE', AMBIENTE === 'desenvolvimento');
 
-// ── Sessão ───────────────────────────────────────────────────
-define('SESSION_NAME',     'mc_session');
-define('SESSION_LIFETIME', 60 * 60 * 8);   // 8 horas
-define('CSRF_LIFETIME',    60 * 60 * 2);   // 2 horas
+// ── Sessão ───────────────────────────────────────────────
+define('SESSION_NOME',    'mc_sessao');
+define('SESSION_DURACAO', 60 * 60 * 8);  // 8 horas em segundos
+define('CSRF_TOKEN_KEY',  'mc_csrf');
 
-// ── Google OAuth (preencha com suas credenciais) ─────────────
-define('GOOGLE_CLIENT_ID',     '');
-define('GOOGLE_CLIENT_SECRET', '');
-define('GOOGLE_REDIRECT_URI',  BASE_URL . '/index.php?mod=conta&action=google_callback');
+// ── Upload de Fotos ───────────────────────────────────────
+define('UPLOAD_DIR',      __DIR__ . '/../assets/uploads/');
+define('UPLOAD_URL',      '/assets/uploads/');
+define('UPLOAD_MAX_SIZE', 2 * 1024 * 1024);   // 2 MB
+define('UPLOAD_TIPOS',    ['image/jpeg', 'image/png', 'image/webp']);
 
-// ── Segurança ────────────────────────────────────────────────
-define('BCRYPT_COST',  12);
-define('MAX_MSG_LEN',  2000);   // caracteres por mensagem
+// ── Paginação ─────────────────────────────────────────────
+define('MSGS_POR_PAGINA', 30);
+define('ITENS_POR_PAGINA', 20);
 
-// ── Debug (desative em produção) ─────────────────────────────
-if (ENV === 'development') {
-    ini_set('display_errors', 1);
+// ── Erros ────────────────────────────────────────────────
+if (DEBUG_MODE) {
     error_reporting(E_ALL);
+    ini_set('display_errors', 1);
 } else {
-    ini_set('display_errors', 0);
     error_reporting(0);
+    ini_set('display_errors', 0);
 }
-
-// Disponibiliza $NOME_SISTEMA como constante também
-define('NOME_SISTEMA', $NOME_SISTEMA);

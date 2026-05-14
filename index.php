@@ -1,143 +1,168 @@
 <?php
-/**
- * MindCash — Roteador Principal
- * Ponto de entrada único do sistema.
- */
+// ============================================================
+//  MindCash — index.php | Roteador e Casca Principal (SPA)
+// ============================================================
 
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 
-iniciarSessao();
-
-// ── Segurança: headers HTTP ──────────────────────────────────
-header("X-Frame-Options: DENY");
-header("X-Content-Type-Options: nosniff");
-header("X-XSS-Protection: 1; mode=block");
-header("Referrer-Policy: strict-origin-when-cross-origin");
-header("Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://lh3.googleusercontent.com;");
-
-// ── Módulos permitidos ───────────────────────────────────────
-$MODULOS = ['inicio', 'comunidade', 'ferramentas', 'mentoria', 'conta'];
-$mod = preg_replace('/[^a-z]/', '', strtolower($_GET['mod'] ?? 'inicio'));
-if (!in_array($mod, $MODULOS, true)) $mod = 'inicio';
-
-// ── Ações AJAX (retornam JSON) ───────────────────────────────
-$action = $_GET['action'] ?? '';
-$ehAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
-          strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
-
-if ($ehAjax && $action) {
-    header('Content-Type: application/json; charset=utf-8');
-    require_once MODULES_PATH . "/{$mod}.php";
-    exit;
+// ── Rotas de API ─────────────────────────────────────────────
+// (para requisições AJAX diretas ao index)
+if (isset($_GET['api'])) {
+    http_response_code(404);
+    die(json_encode(['erro' => 'Endpoint não encontrado']));
 }
 
-// ── Acesso anônimo automático ────────────────────────────────
-if (!estaLogado()) {
-    loginAnonimo();
-}
+$usuario = usuario_logado();
+$csrf    = csrf_gerar();
+$aba     = htmlspecialchars($_GET['aba'] ?? 'inicio', ENT_QUOTES, 'UTF-8');
 
-// ── Ações de autenticação (não-AJAX) ────────────────────────
-if ($mod === 'conta') {
-    if ($action === 'google_callback') { processarCallbackGoogle(); }
-    if ($action === 'logout') { exigirCsrf(); logout(); }
-}
+// Abas válidas
+$abas_validas = ['inicio', 'comunidade', 'ferramentas', 'mentoria', 'conta'];
+if (!in_array($aba, $abas_validas, true)) $aba = 'inicio';
 
-// ── Gera token CSRF para a view ──────────────────────────────
-$csrfToken = gerarCsrfToken();
-$usuario   = usuarioAtual();
-
-// ── Nomes das abas ────────────────────────────────────────────
-$ABAS = [
-    'inicio'       => ['label' => 'Início',      'icon' => 'home'],
-    'comunidade'   => ['label' => 'Comunidade',  'icon' => 'users'],
-    'ferramentas'  => ['label' => 'Ferramentas', 'icon' => 'tool'],
-    'mentoria'     => ['label' => 'Mentoria',    'icon' => 'star'],
-    'conta'        => ['label' => 'Conta',       'icon' => 'user'],
+// ── Ícones SVG Inline (reutilizáveis) ────────────────────────
+$icones = [
+    'inicio'      => '<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+    'comunidade'  => '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+    'ferramentas' => '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    'mentoria'    => '<svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.09 10.9a19.79 19.79 0 01-3.07-8.67A2 2 0 012 .18h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8a16 16 0 006.29 6.29l1.14-1.14a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>',
+    'conta'       => '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    'logo'        => '<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#7C6FFF"/><stop offset="100%" style="stop-color:#00E5C3"/></linearGradient></defs><path d="M16 2L2 12v18h10v-8h8v8h10V12L16 2z" fill="url(#lg)" opacity="0.9"/><path d="M10 20h4v-4h4v4h4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>',
 ];
 
-// ── Ícones SVG inline ─────────────────────────────────────────
-function navIcon(string $name): string {
-    $icons = [
-        'home'  => '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
-        'users' => '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
-        'tool'  => '<path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>',
-        'star'  => '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
-        'user'  => '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>',
-    ];
-    return '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' . ($icons[$name] ?? '') . '</svg>';
-}
+$labels_nav = [
+    'inicio'      => 'Início',
+    'comunidade'  => 'Comunidade',
+    'ferramentas' => 'Ferramentas',
+    'mentoria'    => 'Mentoria',
+    'conta'       => 'Conta',
+];
+
+// ── Foto do usuário ───────────────────────────────────────────
+$foto_usuario = $usuario && $usuario['foto']
+    ? esc(UPLOAD_URL . $usuario['foto'])
+    : null;
+
+$inicial = $usuario ? strtoupper(mb_substr($usuario['nome'], 0, 1, 'UTF-8')) : 'U';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= xss(NOME_SISTEMA) ?> — <?= xss($ABAS[$mod]['label']) ?></title>
-  <meta name="description" content="<?= xss($DESCRICAO) ?>">
-  <meta name="csrf-token" content="<?= xss($csrfToken) ?>">
-  <meta name="theme-color" content="#0b0f19">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="<?= SISTEMA_COR ?>">
+  <meta name="description"  content="<?= esc(SISTEMA_NOME) ?> — <?= esc(SISTEMA_TAGLINE) ?>">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="<?= esc(SISTEMA_NOME) ?>">
 
-  <!-- Fonts & CSS -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="<?= CSS_URL ?>/style.css">
+  <title><?= esc(SISTEMA_NOME) ?> — <?= esc(SISTEMA_TAGLINE) ?></title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Favicon / Icons -->
+  <link rel="icon" type="image/svg+xml" href="/assets/icons/icon.svg">
+  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/css/style.css">
+
+  <!-- Open Graph -->
+  <meta property="og:title"       content="<?= esc(SISTEMA_NOME) ?>">
+  <meta property="og:description" content="<?= esc(SISTEMA_TAGLINE) ?>">
+  <meta property="og:type"        content="website">
 </head>
 <body>
 
-<!-- ── Topbar (desktop) ───────────────────────────────────── -->
-<header class="topbar">
-  <a href="index.php?mod=inicio" class="topbar-logo"><?= xss(NOME_SISTEMA) ?></a>
-  <nav class="topbar-nav">
-    <?php foreach ($ABAS as $m => $info): ?>
-      <?php if ($m === 'mentoria' && !ehAdmin()) continue; ?>
-      <a href="index.php?mod=<?= $m ?>"
-         class="nav-item <?= $mod === $m ? 'active' : '' ?>"
-         data-mod="<?= $m ?>">
-        <?= navIcon($info['icon']) ?>
-        <?= xss($info['label']) ?>
-      </a>
-    <?php endforeach; ?>
-  </nav>
-  <div style="font-size:13px;color:var(--text-muted)">
-    <?= xss($usuario['nome'] ?? 'Visitante') ?>
-    <?php if (ehAdmin()): ?>
-      <span style="color:var(--accent-hot);margin-left:6px">⭐ ADM</span>
-    <?php endif; ?>
-  </div>
-</header>
+<div id="app">
 
-<!-- ── Conteúdo principal ──────────────────────────────────── -->
-<div class="app-shell">
-  <main class="main-content">
-    <?php require_once MODULES_PATH . "/{$mod}.php"; ?>
+  <!-- ═══ SIDEBAR DESKTOP ═══════════════════════════════════ -->
+  <aside id="nav-desktop" role="navigation" aria-label="Menu principal">
+    <div class="sidebar-logo">
+      <?= $icones['logo'] ?>
+      <?= esc(SISTEMA_NOME) ?>
+    </div>
+
+    <nav class="sidebar-nav">
+      <?php foreach ($abas_validas as $item): ?>
+        <button
+          class="sidebar-item <?= $aba === $item ? 'ativo' : '' ?>"
+          data-aba="<?= $item ?>"
+          aria-label="<?= esc($labels_nav[$item]) ?>"
+          aria-current="<?= $aba === $item ? 'page' : 'false' ?>">
+          <?= $icones[$item] ?>
+          <?= esc($labels_nav[$item]) ?>
+        </button>
+      <?php endforeach; ?>
+    </nav>
+
+    <!-- Info do usuário na sidebar -->
+    <div class="sidebar-usuario" data-aba="conta" style="cursor:pointer">
+      <?php if ($foto_usuario): ?>
+        <img src="<?= $foto_usuario ?>" alt="Foto" class="avatar avatar-sm">
+      <?php else: ?>
+        <div class="avatar avatar-sm avatar-placeholder" style="font-size:.75rem">
+          <?= $inicial ?>
+        </div>
+      <?php endif; ?>
+      <div class="sidebar-usuario-info">
+        <div class="sidebar-usuario-nome">
+          <?= $usuario ? esc($usuario['nome']) : 'Visitante' ?>
+        </div>
+        <div class="sidebar-usuario-nivel">
+          <?= $usuario ? esc(ucfirst($usuario['nivel'])) : 'Não autenticado' ?>
+        </div>
+      </div>
+      <svg viewBox="0 0 24 24" width="14" height="14" stroke="var(--texto-terciario)" fill="none" stroke-width="2">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </div>
+  </aside>
+
+  <!-- ═══ CONTEÚDO PRINCIPAL ═════════════════════════════════ -->
+  <main id="conteudo-principal" role="main" aria-live="polite">
+    <!-- Carregado via JS / PHP módulos -->
+    <div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px">
+      <div class="spinner" style="width:36px;height:36px;border-width:3px"></div>
+      <p style="color:var(--texto-terciario);font-size:.9rem">Carregando <?= esc(SISTEMA_NOME) ?>…</p>
+    </div>
   </main>
 
-  <footer>
-    &copy; <?= date('Y') ?> <?= xss(NOME_SISTEMA) ?> · Todos os direitos reservados
-  </footer>
-</div>
+  <!-- ═══ BOTTOM NAV MOBILE ══════════════════════════════════ -->
+  <nav id="nav-mobile" role="navigation" aria-label="Navegação inferior">
+    <?php foreach ($abas_validas as $item): ?>
+      <button
+        class="nav-item <?= $aba === $item ? 'ativo' : '' ?>"
+        data-aba="<?= $item ?>"
+        aria-label="<?= esc($labels_nav[$item]) ?>"
+        aria-current="<?= $aba === $item ? 'page' : 'false' ?>">
+        <span class="nav-icone"><?= $icones[$item] ?></span>
+        <span class="nav-label"><?= esc($labels_nav[$item]) ?></span>
+      </button>
+    <?php endforeach; ?>
+  </nav>
 
-<!-- ── Nav inferior (mobile) ──────────────────────────────── -->
-<nav class="bottom-nav">
-  <?php foreach ($ABAS as $m => $info): ?>
-    <?php if ($m === 'mentoria' && !ehAdmin()) continue; ?>
-    <a href="index.php?mod=<?= $m ?>"
-       class="nav-item <?= $mod === $m ? 'active' : '' ?>"
-       data-mod="<?= $m ?>"
-       style="position:relative">
-      <?= navIcon($info['icon']) ?>
-      <?= xss($info['label']) ?>
-      <?php if ($m === 'mentoria' && ehAdmin()): ?>
-        <span class="badge-adm"></span>
-      <?php endif; ?>
-    </a>
-  <?php endforeach; ?>
-</nav>
+</div><!-- /#app -->
 
-<div id="toast-container"></div>
-<script src="<?= JS_URL ?>/main.js"></script>
+<!-- ═══ TOAST CONTAINER ══════════════════════════════════════ -->
+<div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+<!-- ═══ DADOS PHP → JS ═══════════════════════════════════════ -->
+<script>
+  window.MC = {
+    nomeSistema: <?= json_encode(SISTEMA_NOME) ?>,
+    usuario: <?= json_encode($usuario) ?>,
+    csrf: <?= json_encode($csrf) ?>,
+    abaInicial: <?= json_encode($aba) ?>,
+    uploadUrl: <?= json_encode(UPLOAD_URL) ?>,
+  };
+</script>
+
+<!-- ═══ SCRIPTS ═══════════════════════════════════════════════ -->
+<script src="/js/main.js" defer></script>
+
 </body>
 </html>
