@@ -55,6 +55,7 @@ $inicial = $usuario ? strtoupper(mb_substr($usuario['nome'], 0, 1, 'UTF-8')) : '
   <meta name="theme-color" content="<?= SISTEMA_COR ?>">
   <meta name="description"  content="<?= esc(SISTEMA_NOME) ?> — <?= esc(SISTEMA_TAGLINE) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="<?= esc(SISTEMA_NOME) ?>">
 
